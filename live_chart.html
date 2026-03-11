@@ -88,17 +88,35 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 </div>
 
 <div id="selector-bar">
-  <button class="sym-btn active" data-sym="CL=F"  data-name="CRUDE OIL"   data-exch="NYMEX · WTI"   data-curr="$">CL=F  WTI</button>
-  <button class="sym-btn"        data-sym="NG=F"  data-name="NATURAL GAS" data-exch="NYMEX · NATGAS" data-curr="$">NG=F  GAS</button>
-  <button class="sym-btn"        data-sym="BZ=F"  data-name="BRENT CRUDE" data-exch="ICE · BRENT"    data-curr="$">BZ=F  BRENT</button>
-  <button class="sym-btn"        data-sym="GC=F"  data-name="GOLD"        data-exch="COMEX · XAU"    data-curr="$">GC=F  GOLD</button>
-  <button class="sym-btn"        data-sym="SI=F"  data-name="SILVER"      data-exch="COMEX · XAG"    data-curr="$">SI=F  SILVER</button>
+  <!-- Commodities via Yahoo -->
+  <button class="sym-btn active" data-sym="CL=F" data-name="CRUDE OIL"    data-exch="NYMEX · WTI"   data-curr="$">CL=F WTI</button>
+  <button class="sym-btn"        data-sym="NG=F" data-name="NATURAL GAS"  data-exch="NYMEX · GAS"   data-curr="$">NG=F GAS</button>
+  <button class="sym-btn"        data-sym="BZ=F" data-name="BRENT CRUDE"  data-exch="ICE · BRENT"   data-curr="$">BZ=F BRENT</button>
+  <button class="sym-btn"        data-sym="GC=F" data-name="GOLD"         data-exch="COMEX · XAU"   data-curr="$">GC=F GOLD</button>
+  <button class="sym-btn"        data-sym="SI=F" data-name="SILVER"       data-exch="COMEX · XAG"   data-curr="$">SI=F SILVER</button>
   <div class="sep"></div>
-  <button class="sym-btn" data-sym="BEL.NS"  data-name="BEL"  data-exch="NSE · INDIA" data-curr="₹">BEL</button>
-  <button class="sym-btn" data-sym="ONGC.NS" data-name="ONGC" data-exch="NSE · INDIA" data-curr="₹">ONGC</button>
-  <button class="sym-btn" data-sym="GAIL.NS" data-name="GAIL" data-exch="NSE · INDIA" data-curr="₹">GAIL</button>
-  <button class="sym-btn" data-sym="IGL.NS"  data-name="IGL"  data-exch="NSE · INDIA" data-curr="₹">IGL</button>
-  <button class="sym-btn" data-sym="HAL.NS"  data-name="HAL"  data-exch="NSE · INDIA" data-curr="₹">HAL</button>
+  <!-- Defence — Kite live -->
+  <button class="sym-btn" data-sym="BEL"  data-name="BHARAT ELECTRONICS"   data-exch="NSE · DEFENCE" data-curr="₹">BEL</button>
+  <button class="sym-btn" data-sym="HAL"  data-name="HINDUSTAN AERONAUTICS" data-exch="NSE · DEFENCE" data-curr="₹">HAL</button>
+  <div class="sep"></div>
+  <!-- Gas & Energy — Kite live -->
+  <button class="sym-btn" data-sym="ONGC"      data-name="ONGC"           data-exch="NSE · ENERGY" data-curr="₹">ONGC</button>
+  <button class="sym-btn" data-sym="GAIL"      data-name="GAIL INDIA"     data-exch="NSE · GAS"    data-curr="₹">GAIL</button>
+  <button class="sym-btn" data-sym="IGL"       data-name="IGL"            data-exch="NSE · GAS"    data-curr="₹">IGL</button>
+  <button class="sym-btn" data-sym="MGL"       data-name="MAHANAGAR GAS"  data-exch="NSE · GAS"    data-curr="₹">MGL</button>
+  <button class="sym-btn" data-sym="ATGL"      data-name="ADANI TOTAL GAS" data-exch="NSE · GAS"   data-curr="₹">ATGL</button>
+  <button class="sym-btn" data-sym="GUJGASLTD" data-name="GUJARAT GAS"    data-exch="NSE · GAS"    data-curr="₹">GUJGAS</button>
+  <button class="sym-btn" data-sym="GSPL"      data-name="GUJARAT PETRONET" data-exch="NSE · GAS"  data-curr="₹">GSPL</button>
+  <div class="sep"></div>
+  <!-- IT — Kite live -->
+  <button class="sym-btn" data-sym="TCS"   data-name="TCS"     data-exch="NSE · IT" data-curr="₹">TCS</button>
+  <button class="sym-btn" data-sym="INFY"  data-name="INFOSYS" data-exch="NSE · IT" data-curr="₹">INFY</button>
+  <button class="sym-btn" data-sym="WIPRO" data-name="WIPRO"   data-exch="NSE · IT" data-curr="₹">WIPRO</button>
+  <div class="sep"></div>
+  <!-- Others — Kite live -->
+  <button class="sym-btn" data-sym="HDFCBANK"  data-name="HDFC BANK"    data-exch="NSE · BANKING" data-curr="₹">HDFC</button>
+  <button class="sym-btn" data-sym="TATASTEEL" data-name="TATA STEEL"   data-exch="NSE · METALS"  data-curr="₹">TATASTEEL</button>
+  <button class="sym-btn" data-sym="RELIANCE"  data-name="RELIANCE IND" data-exch="NSE · CONGL"   data-curr="₹">RELIANCE</button>
 </div>
 
 <div id="stats-strip">
@@ -179,7 +197,7 @@ function initChart() {
   return true;
 }
 
-// ── Fetch via local Python proxy (no CORS issues) ─────────────────────────
+// ── Fetch via local Python proxy (handles both Kite and Yahoo formats) ────────
 async function fetchData(sym) {
   const url = `${PROXY}?sym=${encodeURIComponent(sym)}`;
   const res = await fetch(url, { cache: 'no-store' });
@@ -190,6 +208,37 @@ async function fetchData(sym) {
   const json = await res.json();
   if (json.error) throw new Error(json.error);
 
+  // ── Kite format: { source:"kite", candles:[{time,open,high,low,close,volume}] }
+  if (json.source === 'kite') {
+    const raw = json.candles || [];
+    const candles = raw.filter(c => c.open&&c.high&&c.low&&c.close&&c.high>=c.low)
+      .map(c => ({
+        time:   c.time,
+        open:   +c.open.toFixed(2),
+        high:   +c.high.toFixed(2),
+        low:    +c.low.toFixed(2),
+        close:  +c.close.toFixed(2),
+        volume: c.volume || 0,
+      }));
+    const first = candles[0] || {};
+    const last  = candles[candles.length-1] || {};
+    const allHigh = candles.reduce((m,c)=>Math.max(m,c.high), 0);
+    const allLow  = candles.reduce((m,c)=>Math.min(m,c.low), Infinity);
+    const allVol  = candles.reduce((a,c)=>a+(c.volume||0), 0);
+    return {
+      candles,
+      livePrice: json.last_price || last.close,
+      prevClose: first.open,
+      dayHigh:   allHigh,
+      dayLow:    allLow === Infinity ? null : allLow,
+      dayOpen:   first.open,
+      dayVol:    allVol,
+      tsCount:   candles.length,
+      source:    'kite',
+    };
+  }
+
+  // ── Yahoo Finance format ────────────────────────────────────────────────────
   const result = json?.chart?.result?.[0];
   if (!result) throw new Error('No chart data returned');
 
@@ -214,6 +263,7 @@ async function fetchData(sym) {
     dayOpen:   data[0]?.open,
     dayVol:    meta.regularMarketVolume,
     tsCount:   ts.length,
+    source:    'yahoo',
   };
 }
 
