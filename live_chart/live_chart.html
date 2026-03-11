@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Commodity Chart</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Bebas+Neue&display=swap');
+:root {
+  --bg:#060a0f; --panel:#0d1520; --border:#1a2535;
+  --green:#00ff88; --red:#ff3b5c; --blue:#3d9cff;
+  --gold:#f0b429; --text:#c8d8e8; --muted:#4a6080;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* top bar */
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+#symbol-name{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:3px;color:#fff}
+#exchange-badge{font-size:.6rem;padding:3px 8px;border-radius:3px;background:rgba(61,156,255,.15);border:1px solid rgba(61,156,255,.4);color:var(--blue);letter-spacing:1.5px;margin-left:10px}
+#live-price{font-size:2.2rem;font-weight:700;letter-spacing:1px;line-height:1;transition:color .2s}
+#price-change{font-size:.72rem;letter-spacing:1px;margin-top:3px;text-align:center}
+.up{color:var(--green);text-shadow:0 0 16px rgba(0,255,136,.4)}
+.down{color:var(--red);text-shadow:0 0 16px rgba(255,59,92,.4)}
+.flat{color:var(--text)}
+#live-badge{display:flex;align-items:center;gap:7px;font-size:.65rem;letter-spacing:2px;color:var(--muted)}
+#dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.4s ease-in-out infinite}
+#dot.stale{background:var(--gold);box-shadow:0 0 8px var(--gold);animation:none}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+#clock{font-size:.7rem;color:var(--muted);letter-spacing:1px}
+
+/* symbol selector */
+#selector-bar{display:flex;align-items:center;gap:5px;padding:7px 20px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.sym-btn{font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:600;padding:5px 11px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all .15s}
+.sym-btn:hover{border-color:var(--blue);color:var(--blue)}
+.sym-btn.active{background:rgba(61,156,255,.12);border-color:var(--blue);color:var(--blue)}
+.sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+
+/* stats strip */
+#stats-strip{display:flex;padding:0 20px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(13,21,32,.7);overflow-x:auto}
+.stat{padding:5px 16px 5px 0;border-right:1px solid var(--border);margin-right:16px;white-space:nowrap}
+.stat:last-child{border-right:none}
+.stat-label{font-size:.52rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:1px}
+.stat-val{font-size:.78rem;font-weight:600;color:var(--text)}
+
+/* chart */
+#chart-wrap{flex:1;position:relative;min-height:0}
+#chart{width:100%;height:100%}
+
+/* overlay */
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(6,10,15,.92);font-size:.82rem;color:var(--muted);letter-spacing:1px;gap:14px;z-index:10;text-align:center;padding:20px}
+#overlay.hidden{display:none}
+.spinner{width:30px;height:30px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#overlay-msg{line-height:1.7;max-width:480px}
+#overlay-msg code{color:var(--blue);background:rgba(61,156,255,.1);padding:2px 7px;border-radius:3px;font-family:'JetBrains Mono',monospace}
+
+/* toast */
+#toast{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);background:rgba(255,59,92,.12);border:1px solid var(--red);color:var(--red);font-size:.7rem;padding:8px 18px;border-radius:6px;letter-spacing:1px;z-index:20;white-space:nowrap;display:none}
+
+/* footer */
+#footer{display:flex;justify-content:space-between;align-items:center;padding:4px 20px;background:var(--panel);border-top:1px solid var(--border);font-size:.58rem;color:var(--muted);flex-shrink:0}
+#update-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden;width:80px}
+#update-fill{height:100%;background:var(--blue);border-radius:1px}
+
+@keyframes flash-g{0%{background:rgba(0,255,136,.1)}100%{background:transparent}}
+@keyframes flash-r{0%{background:rgba(255,59,92,.1)}100%{background:transparent}}
+.flash-g{animation:flash-g .35s ease-out}
+.flash-r{animation:flash-r .35s ease-out}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div style="display:flex;align-items:center">
+    <div id="symbol-name">CRUDE OIL</div>
+    <div id="exchange-badge">NYMEX · WTI</div>
+  </div>
+  <div style="text-align:center">
+    <div id="live-price" class="flat">—</div>
+    <div id="price-change" class="flat">— —%</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+    <div id="live-badge"><div id="dot"></div>LIVE</div>
+    <div id="clock">--:--:--</div>
+  </div>
+</div>
+
+<div id="selector-bar">
+  <button class="sym-btn active" data-sym="CL=F"  data-name="CRUDE OIL"   data-exch="NYMEX · WTI"   data-curr="$">CL=F  WTI</button>
+  <button class="sym-btn"        data-sym="NG=F"  data-name="NATURAL GAS" data-exch="NYMEX · NATGAS" data-curr="$">NG=F  GAS</button>
+  <button class="sym-btn"        data-sym="BZ=F"  data-name="BRENT CRUDE" data-exch="ICE · BRENT"    data-curr="$">BZ=F  BRENT</button>
+  <button class="sym-btn"        data-sym="GC=F"  data-name="GOLD"        data-exch="COMEX · XAU"    data-curr="$">GC=F  GOLD</button>
+  <button class="sym-btn"        data-sym="SI=F"  data-name="SILVER"      data-exch="COMEX · XAG"    data-curr="$">SI=F  SILVER</button>
+  <div class="sep"></div>
+  <button class="sym-btn" data-sym="BEL.NS"  data-name="BEL"  data-exch="NSE · INDIA" data-curr="₹">BEL</button>
+  <button class="sym-btn" data-sym="ONGC.NS" data-name="ONGC" data-exch="NSE · INDIA" data-curr="₹">ONGC</button>
+  <button class="sym-btn" data-sym="GAIL.NS" data-name="GAIL" data-exch="NSE · INDIA" data-curr="₹">GAIL</button>
+  <button class="sym-btn" data-sym="IGL.NS"  data-name="IGL"  data-exch="NSE · INDIA" data-curr="₹">IGL</button>
+  <button class="sym-btn" data-sym="HAL.NS"  data-name="HAL"  data-exch="NSE · INDIA" data-curr="₹">HAL</button>
+</div>
+
+<div id="stats-strip">
+  <div class="stat"><div class="stat-label">OPEN</div><div class="stat-val" id="s-open">—</div></div>
+  <div class="stat"><div class="stat-label">HIGH</div><div class="stat-val" id="s-high" style="color:var(--green)">—</div></div>
+  <div class="stat"><div class="stat-label">LOW</div><div class="stat-val" id="s-low" style="color:var(--red)">—</div></div>
+  <div class="stat"><div class="stat-label">PREV CLOSE</div><div class="stat-val" id="s-prev">—</div></div>
+  <div class="stat"><div class="stat-label">VOLUME</div><div class="stat-val" id="s-vol">—</div></div>
+  <div class="stat"><div class="stat-label">CANDLES</div><div class="stat-val" id="s-candles">—</div></div>
+  <div class="stat"><div class="stat-label">UPDATED</div><div class="stat-val" id="s-updated">—</div></div>
+</div>
+
+<div id="chart-wrap">
+  <div id="chart"></div>
+  <div id="overlay">
+    <div class="spinner"></div>
+    <div id="overlay-msg">FETCHING LIVE DATA…</div>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<div id="footer">
+  <span>YAHOO FINANCE · 1-MIN CANDLES · LIVE PRICE EVERY SECOND</span>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span>NEXT REFRESH</span>
+    <div id="update-bar"><div id="update-fill" style="width:100%"></div></div>
+  </div>
+</div>
+
+<script>
+// ── Detect how the page is served ─────────────────────────────────────────
+const IS_LOCAL_FILE = location.protocol === 'file:';
+
+// When opened as file://, fetch goes through the local Python proxy.
+// When opened from http://localhost:8000, proxy is on the same origin.
+// Either way the proxy URL is http://localhost:8000/api/chart?sym=...
+const PROXY = 'http://localhost:8000/api/chart';
+
+// ── State ─────────────────────────────────────────────────────────────────
+let chart, candleSeries;
+let candles = [], prevClose = null, lastPrice = null;
+let currentSym = 'CL=F', currentCurr = '$';
+let refreshTimer = null, cdTimer = null;
+
+const REFRESH_MS = 15000;
+const TICK_MS    = 1000;
+
+// ── Init chart ────────────────────────────────────────────────────────────
+function initChart() {
+  if (typeof LightweightCharts === 'undefined') {
+    setOverlay('⚠ Chart library not loaded.<br>Check your internet connection and refresh.');
+    return false;
+  }
+  const wrap = document.getElementById('chart-wrap');
+  if (chart) { chart.remove(); chart = null; candleSeries = null; }
+
+  chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    width: wrap.clientWidth, height: wrap.clientHeight,
+    layout: { background:{type:'solid',color:'#060a0f'}, textColor:'#4a6080',
+              fontFamily:"'JetBrains Mono',monospace", fontSize:11 },
+    grid:  { vertLines:{color:'#0d1520'}, horzLines:{color:'#0d1520'} },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal,
+                 vertLine:{color:'#3d9cff',labelBackgroundColor:'#0d1520'},
+                 horzLine:{color:'#3d9cff',labelBackgroundColor:'#0d1520'} },
+    rightPriceScale: { borderColor:'#1a2535' },
+    timeScale: { borderColor:'#1a2535', timeVisible:true, secondsVisible:false, rightOffset:6 },
+  });
+
+  candleSeries = chart.addCandlestickSeries({
+    upColor:'#00ff88', downColor:'#ff3b5c',
+    borderUpColor:'#00ff88', borderDownColor:'#ff3b5c',
+    wickUpColor:'#00cc66', wickDownColor:'#cc2244',
+  });
+
+  new ResizeObserver(() => chart && chart.resize(wrap.clientWidth, wrap.clientHeight))
+      .observe(wrap);
+  return true;
+}
+
+// ── Fetch via local Python proxy (no CORS issues) ─────────────────────────
+async function fetchData(sym) {
+  const url = `${PROXY}?sym=${encodeURIComponent(sym)}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Proxy error ${res.status}: ${txt.slice(0,120)}`);
+  }
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error('No chart data returned');
+
+  const meta = result.meta;
+  const ts   = result.timestamp || [];
+  const q    = result.indicators?.quote?.[0] || {};
+
+  const data = [];
+  for (let i = 0; i < ts.length; i++) {
+    const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i], c=q.close?.[i];
+    if (o==null||h==null||l==null||c==null) continue;
+    if (h < l) continue;
+    data.push({ time:ts[i], open:+o.toFixed(5), high:+h.toFixed(5),
+                low:+l.toFixed(5), close:+c.toFixed(5), volume:q.volume?.[i]||0 });
+  }
+  return {
+    candles:   data,
+    livePrice: meta.regularMarketPrice,
+    prevClose: meta.chartPreviousClose ?? meta.previousClose,
+    dayHigh:   meta.regularMarketDayHigh,
+    dayLow:    meta.regularMarketDayLow,
+    dayOpen:   data[0]?.open,
+    dayVol:    meta.regularMarketVolume,
+    tsCount:   ts.length,
+  };
+}
+
+// ── Render full candle set ────────────────────────────────────────────────
+function renderCandles(data) {
+  if (!candleSeries || !data.candles.length) return;
+  const dp  = currentCurr === '₹' ? 2 : 4;
+  const fmt = v => v != null ? `${currentCurr}${(+v).toFixed(dp)}` : '—';
+
+  if (data.livePrice > 0) {
+    const last = {...data.candles[data.candles.length-1]};
+    last.close = +data.livePrice.toFixed(5);
+    last.high  = Math.max(last.high, last.close);
+    last.low   = Math.min(last.low,  last.close);
+    data.candles[data.candles.length-1] = last;
+  }
+
+  candleSeries.setData(data.candles);
+  candles = data.candles;
+  chart.timeScale().scrollToRealTime();
+
+  document.getElementById('s-open').textContent    = fmt(data.dayOpen);
+  document.getElementById('s-high').textContent    = fmt(data.dayHigh);
+  document.getElementById('s-low').textContent     = fmt(data.dayLow);
+  document.getElementById('s-prev').textContent    = fmt(data.prevClose);
+  document.getElementById('s-candles').textContent = data.candles.length;
+  document.getElementById('s-vol').textContent     = data.dayVol
+    ? Number(data.dayVol).toLocaleString() : '—';
+  document.getElementById('s-updated').textContent =
+    new Date().toLocaleTimeString('en-IN', {hour12:false});
+}
+
+// ── Update top-bar price ──────────────────────────────────────────────────
+function updatePrice(price, prev) {
+  if (!price || price <= 0) return;
+  const dp   = currentCurr === '₹' ? 2 : 4;
+  const el   = document.getElementById('live-price');
+  const ce   = document.getElementById('price-change');
+  const tb   = document.getElementById('topbar');
+  el.textContent = `${currentCurr}${price.toFixed(dp)}`;
+  if (prev > 0) {
+    const diff = price - prev, pct = (diff/prev*100).toFixed(2);
+    const sign = diff >= 0 ? '+' : '';
+    ce.textContent = `${sign}${currentCurr}${Math.abs(diff).toFixed(dp)}  ${sign}${pct}%`;
+    const cls = diff>0?'up':diff<0?'down':'flat';
+    el.className = cls; ce.className = cls;
+    if (lastPrice !== null && price !== lastPrice) {
+      const f = diff>0?'flash-g':'flash-r';
+      tb.classList.remove('flash-g','flash-r'); void tb.offsetWidth;
+      tb.classList.add(f); setTimeout(()=>tb.classList.remove(f), 350);
+    }
+  }
+  lastPrice = price;
+}
+
+// ── Full refresh ──────────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const data = await fetchData(currentSym);
+    prevClose = data.prevClose;
+    renderCandles(data);
+    updatePrice(data.livePrice, prevClose);
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('dot').classList.remove('stale');
+    hideToast();
+  } catch(e) {
+    console.warn('[chart]', e.message);
+    document.getElementById('dot').classList.add('stale');
+    if (e.message.includes('Failed to fetch') || e.message.includes('ERR_CONNECTION_REFUSED')) {
+      setOverlay(
+        `<b style="color:#ff3b5c">⚠ Server not running</b><br><br>` +
+        `Open a terminal and run:<br><br>` +
+        `<code>python3 run.py</code><br><br>` +
+        `Then open <code>http://localhost:8000</code> in Chrome`
+      );
+    } else {
+      showToast(e.message);
+    }
+  }
+}
+
+// ── Per-second tick ───────────────────────────────────────────────────────
+async function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-IN', {hour12:false});
+  if (!candles.length || !candleSeries) return;
+  try {
+    const data = await fetchData(currentSym);
+    const live = data.livePrice;
+    if (!live) return;
+
+    if (data.tsCount > candles.length) {
+      const nc = {...data.candles[data.candles.length-1]};
+      nc.close = +live.toFixed(5);
+      nc.high  = Math.max(nc.high, nc.close);
+      nc.low   = Math.min(nc.low,  nc.close);
+      candles.push(nc);
+      candleSeries.update(nc);
+    } else {
+      const last = {...candles[candles.length-1]};
+      last.close = +live.toFixed(5);
+      last.high  = Math.max(last.high, last.close);
+      last.low   = Math.min(last.low,  last.close);
+      candles[candles.length-1] = last;
+      candleSeries.update(last);
+    }
+    updatePrice(live, prevClose);
+    document.getElementById('dot').classList.remove('stale');
+    document.getElementById('s-updated').textContent =
+      new Date().toLocaleTimeString('en-IN', {hour12:false});
+  } catch(_) {
+    document.getElementById('dot').classList.add('stale');
+  }
+}
+
+// ── Countdown ─────────────────────────────────────────────────────────────
+function startCountdown() {
+  let v = REFRESH_MS/1000;
+  const fill = document.getElementById('update-fill');
+  if (cdTimer) clearInterval(cdTimer);
+  fill.style.transition = 'none'; fill.style.width = '100%';
+  cdTimer = setInterval(()=>{
+    v = Math.max(0, v-1);
+    fill.style.transition = 'width 1s linear';
+    fill.style.width = (v/(REFRESH_MS/1000)*100)+'%';
+  }, 1000);
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+function setOverlay(html) {
+  document.getElementById('overlay-msg').innerHTML = html;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = '⚠  '+msg; t.style.display='block';
+  setTimeout(()=>t.style.display='none', 9000);
+}
+function hideToast() { document.getElementById('toast').style.display='none'; }
+
+// ── Symbol buttons ────────────────────────────────────────────────────────
+document.querySelectorAll('.sym-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sym-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSym=btn.dataset.sym; currentCurr=btn.dataset.curr;
+    candles=[]; lastPrice=null; prevClose=null;
+    document.getElementById('symbol-name').textContent    = btn.dataset.name;
+    document.getElementById('exchange-badge').textContent = btn.dataset.exch;
+    document.getElementById('live-price').textContent     = '—';
+    document.getElementById('price-change').textContent   = '— —%';
+    setOverlay('FETCHING LIVE DATA…');
+    document.querySelector('#overlay .spinner').style.display='block';
+    clearInterval(refreshTimer); clearInterval(cdTimer);
+    refresh(); startCountdown();
+    refreshTimer = setInterval(()=>{ refresh(); startCountdown(); }, REFRESH_MS);
+  });
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (!initChart()) return;
+  refresh(); startCountdown();
+  refreshTimer = setInterval(()=>{ refresh(); startCountdown(); }, REFRESH_MS);
+  setInterval(tick, TICK_MS);
+});
+</script>
+</body>
+</html>
